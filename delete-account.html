@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>מחיקת חשבון · Boomerang / Boomerang Driver</title>
+<style>
+  :root { --ink:#141419; --muted:#555; --line:#e5e5ea; --accent:#1e40af; --danger:#b3261e; --danger-bg:#fdecec; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Hebrew", sans-serif; color:var(--ink); line-height:1.7; background:#fff; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 40px 22px 80px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color:var(--muted); margin: 0 0 22px; font-size:.95rem; }
+  .warn { background:var(--danger-bg); border:1px solid #f3c6c2; border-radius:10px; padding:14px 16px; font-size:.92rem; margin-bottom: 24px; }
+  .warn strong { color: var(--danger); }
+  label { display:block; font-size:.9rem; font-weight:600; margin: 16px 0 6px; }
+  input {
+    width:100%; font-size:1rem; padding:11px 13px; border-radius:8px;
+    border:1px solid var(--line); background:#fafafa; color:var(--ink);
+  }
+  input:focus { outline:2px solid var(--accent); outline-offset:1px; background:#fff; }
+  button {
+    width:100%; margin-top: 22px; padding:13px; border:none; border-radius:10px;
+    background:var(--danger); color:#fff; font-size:1rem; font-weight:700; cursor:pointer;
+  }
+  button:disabled { opacity:.55; cursor:default; }
+  button:not(:disabled):hover { filter:brightness(1.06); }
+  .msg { margin-top:16px; padding:12px 14px; border-radius:8px; font-size:.92rem; display:none; }
+  .msg.show { display:block; }
+  .msg.error { background:var(--danger-bg); color:var(--danger); border:1px solid #f3c6c2; }
+  .msg.success { background:#e8f5e9; color:#1e6b2f; border:1px solid #bfe3c4; }
+  .back { display:block; text-align:center; margin-top: 28px; color:var(--accent); text-decoration:none; font-size:.9rem; }
+  .success-view { display:none; text-align:center; }
+  .success-view.show { display:block; }
+  .success-view .icon { font-size: 2.6rem; margin-bottom: 8px; }
+  .form-view.hide { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="form-view" id="formView">
+    <h1>מחיקת חשבון</h1>
+    <p class="sub">Boomerang · Boomerang Driver — לשליחים, בתי עסק וצוות המוקד</p>
+
+    <div class="warn">
+      <strong>שימו לב:</strong> הפעולה מוחקת לצמיתות את ההתחברות שלכם ואת הפרטים
+      האישיים שלכם מהמערכת. לא ניתן לבטל. הזמנות שכבר בוצעו יישארו בהיסטוריה
+      של המערכת, ללא הפרטים האישיים שלכם.
+    </div>
+
+    <form id="deleteForm" autocomplete="on">
+      <label for="username">שם משתמש</label>
+      <input id="username" name="username" type="text" autocomplete="username" required
+             placeholder="כפי שמשמש אתכם להתחברות לאפליקציה" />
+
+      <label for="password">סיסמה</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+      <button type="submit" id="submitBtn">מחיקת החשבון לצמיתות</button>
+      <div class="msg" id="msg"></div>
+    </form>
+
+    <a class="back" href="index.html">חזרה</a>
+  </div>
+
+  <div class="success-view" id="successView">
+    <div class="icon">✅</div>
+    <h1>החשבון נמחק</h1>
+    <p class="sub">ההתחברות והפרטים האישיים שלכם הוסרו לצמיתות מהמערכת.</p>
+    <a class="back" href="index.html">חזרה</a>
+  </div>
+
+</div>
+
+<script>
+  // Same public values already shipped inside both Android app bundles — the
+  // publishable key is meant to be exposed client-side; delete_my_account()
+  // itself is what enforces "only your own account", not this key.
+  const SUPABASE_URL = 'https://smxhxzlovwldyggbktqv.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_A7grn-bjXQiv9pJbvX2MGQ_ODU-hxQv';
+  const AUTH_DOMAIN = 'users.boomerang.app';
+
+  const form = document.getElementById('deleteForm');
+  const msg = document.getElementById('msg');
+  const submitBtn = document.getElementById('submitBtn');
+
+  function showMsg(text, kind) {
+    msg.textContent = text;
+    msg.className = 'msg show ' + kind;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('username').value.trim().toLowerCase();
+    const password = document.getElementById('password').value;
+    if (!username || !password) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'מוחק…';
+    msg.className = 'msg';
+
+    try {
+      // Step 1: sign in — identical to what both apps do, just from a browser.
+      const loginRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: `${username}@${AUTH_DOMAIN}`, password }),
+      });
+      const loginData = await loginRes.json();
+      if (loginRes.status !== 200) {
+        throw new Error('שם משתמש או סיסמה שגויים.');
+      }
+
+      // Step 2: the same delete_my_account() RPC the apps call. It only ever
+      // deletes the caller's own account (auth.uid()), refuses a manager
+      // account outright, and refuses a driver with a delivery in progress —
+      // any of those come back as this call's own error message, shown as-is.
+      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_my_account`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${loginData.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+
+      if (delRes.status === 204) {
+        document.getElementById('formView').classList.add('hide');
+        document.getElementById('successView').classList.add('show');
+        return;
+      }
+
+      const delData = await delRes.json().catch(() => ({}));
+      throw new Error(delData.message || 'לא הצלחנו למחוק את החשבון. נסו שוב מאוחר יותר.');
+    } catch (err) {
+      showMsg(err.message, 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'מחיקת החשבון לצמיתות';
+    }
+  });
+</script>
+</body>
+</html>
